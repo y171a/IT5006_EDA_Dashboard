@@ -1,2 +1,6 @@
 ucimlrepo
 scikit-learn
+matplotlib
+missingno
+plotly
+scipy
