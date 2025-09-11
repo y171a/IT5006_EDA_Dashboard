@@ -339,11 +339,11 @@ with left_col:
     
     with tab1:
         fig_bar = plot_interactive_bar(df)
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, width=True)
     
     with tab2:
         fig_heatmap = plot_interactive_correlation_heatmap(df)
-        st.plotly_chart(fig_heatmap, use_container_width=True)
+        st.plotly_chart(fig_heatmap, width=True)
     
     with tab3:
         col_a, col_b = st.columns([1, 1])
@@ -356,18 +356,18 @@ with left_col:
                 sample_size = None
         
         fig_matrix = plot_interactive_matrix(df, sample_size=sample_size, max_cols=50)
-        st.plotly_chart(fig_matrix, use_container_width=True)
+        st.plotly_chart(fig_matrix, width=True)
     
     with tab4:  # DENDROGRAM TAB
         max_features = st.slider("Max features for dendrogram", min_value=10, max_value=50, value=25, step=5)
         fig_dendrogram = plot_interactive_dendrogram(df, max_features=max_features)
-        st.plotly_chart(fig_dendrogram, use_container_width=True)
+        st.plotly_chart(fig_dendrogram, width=True)
         st.info("**How to read:**\n- Columns connected at lower heights have similar missing patterns\n- Distance = 1 - |correlation| of missingness patterns")
     
     with tab5:  # CLUSTERS TAB (previously tab4)
         n_clusters = st.slider("Number of clusters", 2, 10, 5, key="cluster_n")
         fig_clusters = plot_missing_patterns_clustered(df, n_clusters)
-        st.plotly_chart(fig_clusters, use_container_width=True)
+        st.plotly_chart(fig_clusters, width=True)
 
 with right_col:
     # Missing values summary
@@ -390,7 +390,7 @@ with right_col:
         hover_data={'Missing Count': ':,'}
     )
     fig_summary.update_layout(showlegend=False, yaxis={'categoryorder':'total ascending'})
-    st.plotly_chart(fig_summary, use_container_width=True)
+    st.plotly_chart(fig_summary, width=True)
     
 # --- Detailed Analysis Section ---
 st.markdown("---")
@@ -464,7 +464,7 @@ with col_left:
             height=400
         )
         
-        st.plotly_chart(fig_stacked, use_container_width=True)
+        st.plotly_chart(fig_stacked, width=True)
         
         # Summary metrics
         both_measured = len(df1[(df1['max_glu_serum'] == 'Measured') & (df1['A1Cresult'] == 'Measured')])
@@ -512,7 +512,7 @@ distinct_counts = pd.DataFrame({
 }).sort_values(by='Distinct Count', ascending=False)
 
 # Display the dataframe
-st.dataframe(distinct_counts, use_container_width=True)
+st.dataframe(distinct_counts, width=True)
 
 # Note about ID columns
 if any(col in df.columns for col in ID_COLUMNS):
@@ -533,7 +533,7 @@ with chart_col1:
         xaxis_tickangle=-45,
         height=400
     )
-    st.plotly_chart(fig_with_ids, use_container_width=True)
+    st.plotly_chart(fig_with_ids, width=True)
 
 with chart_col2:
     # Chart WITHOUT identifiers
@@ -549,7 +549,7 @@ with chart_col2:
         xaxis_tickangle=-45,
         height=400
     )
-    st.plotly_chart(fig_no_ids, use_container_width=True)
+    st.plotly_chart(fig_no_ids, width=True)
 
 # Show features with very low uniqueness
 low_uniqueness = distinct_counts[distinct_counts['Distinct Count'] <= 2]
@@ -585,7 +585,7 @@ with st.expander("📄 View Full Dataset", expanded=False):
     if search_col != "All" and search_val != "All" and search_val != "":
         df_display = df[df[search_col] == search_val].head(show_rows)
     
-    st.dataframe(df_display, use_container_width=True)
+    st.dataframe(df_display, width=True)
     
     # Download button
     csv = df.to_csv(index=False)
