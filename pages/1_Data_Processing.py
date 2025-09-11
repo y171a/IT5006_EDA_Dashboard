@@ -13,7 +13,18 @@ from sklearn.cluster import KMeans
 
 st.set_page_config(page_title="Data Processing Dashboard", page_icon="⚙️", layout="wide")
 
-# Dashboard Header
+# Dashboard Header with custom styling
+st.markdown("""
+<style>
+    .dashboard-header {
+        background-color: #f0f2f6;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.markdown("""
 <div class="dashboard-header">
     <h1>📊 Data Processing Dashboard</h1>
@@ -21,10 +32,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+
 # Load data (cached)
 df = load_data()
 
-# --- Helper Functions ---
+# Identifier columns
+ID_COLUMNS = ['encounter_id', 'patient_nbr']
+
 def plot_interactive_bar(df):
     """Recreates the missingno bar chart using Plotly for interactivity."""
     non_null_counts = df.notna().sum()
@@ -39,7 +53,10 @@ def plot_interactive_bar(df):
 
 def plot_interactive_correlation_heatmap(df):
     """Recreates the triangular, annotated missingno correlation heatmap using Plotly."""
-    missing_cols = df.columns[df.isnull().any()].tolist()
+    # Exclude ID columns from correlation analysis
+    analysis_cols = [col for col in df.columns if col not in ID_COLUMNS]
+    missing_cols = [col for col in analysis_cols if df[col].isnull().any()]
+    
     if len(missing_cols) < 2:
         fig = go.Figure()
         fig.update_layout(
@@ -72,7 +89,7 @@ def plot_interactive_correlation_heatmap(df):
     ))
 
     fig.update_layout(
-        title='Missing Value Correlation Heatmap',
+        title='Missing Value Correlation Heatmap (excluding ID columns)',
         xaxis_showgrid=False,
         yaxis_showgrid=False,
         yaxis_autorange='reversed',
@@ -80,9 +97,10 @@ def plot_interactive_correlation_heatmap(df):
     )
     return fig
 
-def plot_interactive_matrix(df, sample_size=1000, max_cols=50):
+def plot_interactive_matrix(df, sample_size=None, max_cols=50):
     """Creates an interactive version of the missingno matrix plot using Plotly."""
-    if len(df) > sample_size:
+    # Only sample if specified
+    if sample_size and len(df) > sample_size:
         df_subset = df.sample(n=sample_size, random_state=42)
         sample_info = f" (Sample: {sample_size} rows)"
     else:
@@ -94,43 +112,172 @@ def plot_interactive_matrix(df, sample_size=1000, max_cols=50):
         top_missing_cols = missing_counts.nlargest(max_cols).index
         df_subset = df_subset[top_missing_cols]
     
+    # Create binary matrix (0 for missing, 1 for present)
     missing_matrix = (~df_subset.isnull()).astype(int)
     
-    fig = go.Figure(data=go.Heatmap(
+    # Create the main heatmap
+    fig = go.Figure()
+    
+    # Main matrix plot
+    fig.add_trace(go.Heatmap(
         z=missing_matrix.values,
-        x=missing_matrix.columns,
+        x=list(range(len(missing_matrix.columns))),
         y=list(range(len(missing_matrix))),
         colorscale=[[0, 'white'], [1, 'black']],
         showscale=False,
-        hovertemplate='Row: %{y}<br>Column: %{x}<br>Value: %{z}<extra></extra>'
+        xgap=1,
+        ygap=0,
+        hovertemplate='Row: %{y}<br>Column: %{customdata}<br>Present: %{z}<extra></extra>',
+        customdata=[missing_matrix.columns.tolist()] * len(missing_matrix),
+        name='Data Matrix'
     ))
     
-    col_completeness = (missing_matrix.sum() / len(missing_matrix) * 100).values
+    # Calculate row completeness for sparkline
+    row_completeness = missing_matrix.sum(axis=1)
     
-    fig.add_trace(go.Bar(
-        x=missing_matrix.columns,
-        y=col_completeness,
-        yaxis='y2',
-        marker_color='lightblue',
-        name='Completeness %',
-        hovertemplate='%{x}<br>Completeness: %{y:.1f}%<extra></extra>'
-    ))
+    # Add sparkline on the right
+    sparkline_x = [len(missing_matrix.columns) + 1] * len(row_completeness)
+    sparkline_width = row_completeness.values / len(missing_matrix.columns) * 5  # Scale for visibility
     
+    # Add horizontal bars for sparkline
+    for i, (x, width) in enumerate(zip(sparkline_x, sparkline_width)):
+        fig.add_shape(
+            type="rect",
+            x0=x, x1=x + width,
+            y0=i - 0.4, y1=i + 0.4,
+            fillcolor="black",
+            line_width=0,
+        )
+    
+    # Update layout
     fig.update_layout(
-        title=f'Missing Data Matrix{sample_info}',
-        xaxis=dict(tickangle=-45, side='top', showgrid=False),
-        yaxis=dict(showticklabels=False, autorange='reversed', showgrid=False, domain=[0.2, 1]),
-        yaxis2=dict(side='right', overlaying='y', range=[0, 100], showgrid=True, 
-                    title='Completeness %', domain=[0, 0.15]),
+        xaxis=dict(
+            tickmode='array',
+            tickvals=list(range(len(missing_matrix.columns))),
+            ticktext=[col for col in missing_matrix.columns],
+            tickangle=-90,
+            side='top',
+            showgrid=False,
+            zeroline=False,
+            range=[-1, len(missing_matrix.columns) + 7]
+        ),
+        yaxis=dict(
+            showticklabels=False,
+            autorange='reversed',
+            showgrid=False,
+            zeroline=False,
+            range=[-2, len(missing_matrix)]
+        ),
         height=600,
+        width=1200,
         plot_bgcolor='white',
-        showlegend=False
+        showlegend=False,
+        margin=dict(l=50, r=100, t=120, b=80)
     )
+    
+    # Add text annotations
+    fig.add_annotation(
+        text=f"{len(missing_matrix)}",
+        x=-1,
+        y=len(missing_matrix)/2,
+        showarrow=False,
+        font=dict(size=12)
+    )
+    
+    # Title at bottom
+    fig.add_annotation(
+        text=f"Missing Matrix (Sparse Visualization){sample_info}",
+        x=len(missing_matrix.columns)/2,
+        y=len(missing_matrix) + 1,
+        showarrow=False,
+        font=dict(size=14, family="Arial"),
+        xanchor='center'
+    )
+    
+    return fig
+
+def plot_interactive_dendrogram(df, max_features=30):
+    """Creates an interactive dendrogram showing the clustering of missing values."""
+    # Exclude ID columns from clustering analysis
+    analysis_cols = [col for col in df.columns if col not in ID_COLUMNS]
+    missing_cols = [col for col in analysis_cols if df[col].isnull().any()]
+    
+    if len(missing_cols) < 2:
+        fig = go.Figure()
+        fig.update_layout(
+            title="Not enough columns with missing data to generate a dendrogram",
+            xaxis={'visible': False},
+            yaxis={'visible': False}
+        )
+        return fig
+    
+    # Limit features if too many
+    if len(missing_cols) > max_features:
+        missing_percentages = df[missing_cols].isnull().mean()
+        # Select columns with varied missing percentages
+        selected_cols = missing_percentages.nlargest(max_features).index.tolist()
+    else:
+        selected_cols = missing_cols
+    
+    # Create binary matrix for missing values
+    missing_matrix = df[selected_cols].isnull().astype(int)
+    
+    # Calculate correlation matrix
+    corr_matrix = missing_matrix.corr()
+    
+    # Create distance matrix
+    distance_matrix = 1 - corr_matrix.abs()
+    
+    # Perform hierarchical clustering
+    condensed_dist = squareform(distance_matrix.values)
+    Z = linkage(condensed_dist, method='average')
+    
+    # Create dendrogram
+    dendro = dendrogram(Z, labels=selected_cols, no_plot=True)
+    
+    # Create the plot
+    fig = go.Figure()
+    
+    # Add dendrogram lines
+    for i, (xs, ys) in enumerate(zip(dendro['icoord'], dendro['dcoord'])):
+        fig.add_trace(go.Scatter(
+            x=xs,
+            y=ys,
+            mode='lines',
+            line=dict(color='black', width=1.5),
+            hoverinfo='skip',
+            showlegend=False
+        ))
+    
+    # Update layout
+    fig.update_layout(
+        title='Missing Matrix (Hierarchical Clustering of Missingness) - ID columns excluded',
+        xaxis=dict(
+            tickmode='array',
+            tickvals=[x*10 + 5 for x in range(len(selected_cols))],
+            ticktext=dendro['ivl'],
+            tickangle=-90,
+            showgrid=False,
+            zeroline=False
+        ),
+        yaxis=dict(
+            showgrid=True,
+            zeroline=False,
+            title='Distance'
+        ),
+        height=600,
+        width=1200,
+        plot_bgcolor='white',
+        margin=dict(l=80, r=20, t=80, b=150)
+    )
+    
     return fig
 
 def plot_missing_patterns_clustered(df, n_clusters=5):
     """Shows a simpler visualization of missing data patterns using clustering."""
-    missing_cols = df.columns[df.isnull().any()].tolist()
+    # Exclude ID columns from clustering
+    analysis_cols = [col for col in df.columns if col not in ID_COLUMNS]
+    missing_cols = [col for col in analysis_cols if df[col].isnull().any()]
     
     if len(missing_cols) < n_clusters:
         n_clusters = max(2, len(missing_cols) - 1)
@@ -150,7 +297,7 @@ def plot_missing_patterns_clustered(df, n_clusters=5):
         x='Column', 
         y='Missing %',
         color='Cluster',
-        title=f'Columns Grouped by Missing Data Patterns ({n_clusters} clusters)',
+        title=f'Columns Grouped by Missing Data Patterns ({n_clusters} clusters) - ID columns excluded',
         color_discrete_sequence=px.colors.qualitative.Set3
     )
     fig.update_xaxes(tickangle=-45)
@@ -176,16 +323,20 @@ with col5:
 
 st.markdown("---")
 
-# --- Main Dashboard Layout ---
-# Create two main columns
+# --- Missing Data Visualizations ---
 left_col, right_col = st.columns([2, 1])
-
 with left_col:
     # Missing data visualization container
     st.subheader("📊 Missing Data Patterns")
     
-    # Tabs for different visualizations
-    tab1, tab2, tab3, tab4 = st.tabs(["Bar Chart", "Heatmap", "Matrix", "Clusters"])
+    # Tabs for different visualizations - ALL 5 TABS
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Bar Chart", 
+        "Heatmap", 
+        "Matrix", 
+        "Dendrogram",  # This was missing
+        "Clusters"
+    ])
     
     with tab1:
         fig_bar = plot_interactive_bar(df)
@@ -198,13 +349,23 @@ with left_col:
     with tab3:
         col_a, col_b = st.columns([1, 1])
         with col_a:
-            sample_size = st.slider("Sample size", 100, 2000, 500, 100, key="matrix_sample")
+            use_sampling = st.checkbox("Use sampling for performance", value=True)
         with col_b:
-            max_cols = st.slider("Max columns", 10, 50, 30, 5, key="matrix_cols")
-        fig_matrix = plot_interactive_matrix(df, sample_size, max_cols)
+            if use_sampling:
+                sample_size = st.slider("Sample size", 100, 1000, 500, 100)
+            else:
+                sample_size = None
+        
+        fig_matrix = plot_interactive_matrix(df, sample_size=sample_size, max_cols=50)
         st.plotly_chart(fig_matrix, use_container_width=True)
     
-    with tab4:
+    with tab4:  # DENDROGRAM TAB
+        max_features = st.slider("Max features for dendrogram", min_value=10, max_value=50, value=25, step=5)
+        fig_dendrogram = plot_interactive_dendrogram(df, max_features=max_features)
+        st.plotly_chart(fig_dendrogram, use_container_width=True)
+        st.info("**How to read:**\n- Columns connected at lower heights have similar missing patterns\n- Distance = 1 - |correlation| of missingness patterns")
+    
+    with tab5:  # CLUSTERS TAB (previously tab4)
         n_clusters = st.slider("Number of clusters", 2, 10, 5, key="cluster_n")
         fig_clusters = plot_missing_patterns_clustered(df, n_clusters)
         st.plotly_chart(fig_clusters, use_container_width=True)
@@ -231,7 +392,7 @@ with right_col:
     )
     fig_summary.update_layout(showlegend=False, yaxis={'categoryorder':'total ascending'})
     st.plotly_chart(fig_summary, use_container_width=True)
-
+    
 # --- Detailed Analysis Section ---
 st.markdown("---")
 st.subheader("📋 Detailed Analyses")
@@ -323,11 +484,16 @@ with col_left:
 with col_right:
     with st.expander("🔧 Data Cleaning: Weight Column", expanded=False):
         st.warning("""
-        **Dropping 'weight' Column**
-        
-        - **97% missing values**: Imputation would be speculative
-        - **Fails threshold**: Unsuitable for modeling
-        - **Spurious clustering**: Correlation driven by sparsity, not clinical relevance
+        ⚠️ **Important: Dropping the 'weight' Column**
+
+        The `weight` column will be removed from the dataset due to the following reasons:
+
+        - **97% missing values**: With nearly 97% of data missing, any imputation would be highly speculative and likely introduce significant noise
+        - **Exceeds practical threshold**: This level of missingness fails the threshold for meaningful statistical inference or predictive modeling
+        - **Spurious clustering**: While it clusters with `payer_code` and `medical_specialty` in the dendrogram, this is driven by shared sparsity—not semantic or clinical relevance
+        - **Limited clinical utility**: The extreme sparsity makes it unsuitable for reliable analysis or modeling
+
+        **Decision**: Drop the column to maintain data integrity and model reliability.
         """)
         
         # Weight statistics
@@ -335,57 +501,65 @@ with col_right:
         weight_missing_pct = (weight_missing / len(df)) * 100
         weight_present = (~df['weight'].isnull()).sum()
         df.drop(columns='weight', inplace=True)
-    
 
 # --- Feature Uniqueness Analysis ---
-st.markdown("---")
-st.subheader("📊 Feature Data Uniqueness")
+st.divider()
+st.header("📊 Feature Data Uniqueness Checks")
 
 # Calculate distinct counts
 distinct_counts = pd.DataFrame({
     'Feature': df.columns,
-    'Distinct Count': df.nunique().values,
-    'Uniqueness Ratio': (df.nunique() / len(df) * 100).round(2)
+    'Distinct Count': df.nunique().values
 }).sort_values(by='Distinct Count', ascending=False)
 
-# Create two columns for the uniqueness analysis
-unique_col1, unique_col2 = st.columns([3, 2])
+# Display the dataframe
+st.dataframe(distinct_counts, use_container_width=True)
 
-with unique_col1:
-    # Interactive bar chart
-    fig_uniqueness = px.bar(
+# Note about ID columns
+if any(col in df.columns for col in ID_COLUMNS):
+    st.info(f"**Note**: Columns {ID_COLUMNS} are identifier columns with high uniqueness by design.")
+
+# Create two columns for the two charts
+chart_col1, chart_col2 = st.columns(2)
+
+with chart_col1:
+    # Chart WITH identifiers
+    fig_with_ids = px.bar(
         distinct_counts.head(20),
         x='Feature',
         y='Distinct Count',
-        title='Top 20 Features by Distinct Count',
-        hover_data=['Uniqueness Ratio'],
-        color='Uniqueness Ratio',
-        color_continuous_scale='Viridis'
+        title='Top 20 Features by Distinct Count (Including IDs)'
     )
-    
-    fig_uniqueness.update_layout(
+    fig_with_ids.update_layout(
         xaxis_tickangle=-45,
-        height=400,
-        coloraxis_colorbar_title="Uniqueness %"
+        height=400
     )
-    
-    st.plotly_chart(fig_uniqueness, use_container_width=True)
+    st.plotly_chart(fig_with_ids, use_container_width=True)
 
-with unique_col2:
-    st.markdown("##### Key Insights")
+with chart_col2:
+    # Chart WITHOUT identifiers
+    distinct_counts_no_ids = distinct_counts[~distinct_counts['Feature'].isin(ID_COLUMNS)]
     
-    # High uniqueness features
-    high_uniqueness = distinct_counts[distinct_counts['Uniqueness Ratio'] > 95]
-    if len(high_uniqueness) > 0:
-        st.info(f"**{len(high_uniqueness)} features** with >95% unique values")
-        for feat in high_uniqueness['Feature'].head(5):
-            st.text(f"• {feat}")
+    fig_no_ids = px.bar(
+        distinct_counts_no_ids.head(20),
+        x='Feature',
+        y='Distinct Count',
+        title='Top 20 Features by Distinct Count (Excluding IDs)'
+    )
+    fig_no_ids.update_layout(
+        xaxis_tickangle=-45,
+        height=400
+    )
+    st.plotly_chart(fig_no_ids, use_container_width=True)
+
+# Show features with very low uniqueness
+low_uniqueness = distinct_counts[distinct_counts['Distinct Count'] <= 2]
+if len(low_uniqueness) > 0:
+    st.warning(f"**{len(low_uniqueness)} features** with ≤2 unique values")
     
-    # Low uniqueness features
-    low_uniqueness = distinct_counts[distinct_counts['Distinct Count'] <= 2]
-    if len(low_uniqueness) > 0:
-        st.warning(f"**{len(low_uniqueness)} features** with ≤2 unique values")
-        for feat in low_uniqueness['Feature'].head(5):
+    # Create scrollable container showing all features
+    with st.container(height=120):
+        for feat in low_uniqueness['Feature']:
             st.text(f"• {feat}")
 
 # --- Data Preview Section ---
