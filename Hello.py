@@ -25,9 +25,22 @@ st.markdown(
 
 @st.cache_data
 def load_data():
-    """Fetches the Diabetes dataset from the UCI repository and returns it as a DataFrame."""
+    """Fetches the complete Diabetes dataset from the UCI repository and returns it as a DataFrame."""
     diabetes_dataset = fetch_ucirepo(id=296)
-    X = diabetes_dataset.data.features
-    y = diabetes_dataset.data.targets
-    df = pd.concat([X, y], axis=1)
+    
+    # Try to get the original complete dataset
+    if hasattr(diabetes_dataset.data, 'original'):
+        df = diabetes_dataset.data.original
+    else:
+        # If no original, combine all available data
+        X = diabetes_dataset.data.features
+        y = diabetes_dataset.data.targets
+        
+        # Check for identifiers
+        if hasattr(diabetes_dataset.data, 'identifiers'):
+            ids = diabetes_dataset.data.identifiers
+            df = pd.concat([ids, X, y], axis=1)
+        else:
+            df = pd.concat([X, y], axis=1)
+    
     return df
