@@ -32,7 +32,12 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
+col1, col2, col3 = st.columns([1,4,1])
+with col2:
+    if st.button("🔄 Clear Cache and Reload Data", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+        
 # Load data (cached)
 df = load_data()
 
