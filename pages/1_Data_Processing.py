@@ -27,7 +27,7 @@ st.markdown("""
 
 st.markdown("""
 <div class="dashboard-header">
-    <h1>📊 Data Processing Dashboard</h1>
+    <h1>⚙️ Data Processing Dashboard</h1>
     <p>Interactive analysis of data quality, missing values, and processing decisions</p>
 </div>
 """, unsafe_allow_html=True)
@@ -399,40 +399,15 @@ if low_var_features:
             **Decision**: Drop medication columns with >99% "No" values to improve model interpretability and computational efficiency.
             """)
 
-# --- Data Preview Section ---
-st.markdown("---")
-with st.expander("📄 View Full Dataset", expanded=False):
-    # Add search/filter options
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        search_col = st.selectbox("Search column:", ["All"] + list(df.columns))
-    with col2:
-        if search_col != "All":
-            unique_vals = df[search_col].dropna().unique()
-            if len(unique_vals) < 100:
-                search_val = st.selectbox("Filter by value:", ["All"] + list(unique_vals))
-            else:
-                search_val = st.text_input("Filter value:")
-        else:
-            search_val = "All"
-    with col3:
-        show_rows = st.number_input("Show rows:", min_value=10, max_value=1000, value=100)
-    
-    # Apply filters
-    df_display = df.head(show_rows)
-    if search_col != "All" and search_val != "All" and search_val != "":
-        df_display = df[df[search_col] == search_val].head(show_rows)
-    
-    st.dataframe(df_display, use_container_width=True)
-    
-    # Download button
-    csv = df.to_csv(index=False)
-    st.download_button(
-        label="📥 Download Full Dataset as CSV",
-        data=csv,
-        file_name='processed_data.csv',
-        mime='text/csv'
-    )
+# Drop low variance features
+df.drop(columns=low_var_df.Feature.to_list(), inplace=True)
+
+# --- Store Cleaned Dataset ---
+# This should be at the very bottom of your data processing page
+# after all the drop operations have been performed
+
+# Store the cleaned dataframe in session state
+st.session_state.cleaned_df = df
 
 # --- Footer ---
 st.markdown("---")
