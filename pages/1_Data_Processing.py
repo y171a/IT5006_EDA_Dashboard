@@ -304,6 +304,104 @@ def plot_missing_patterns_clustered(df, n_clusters=5):
     
     return fig
 
+def detect_and_plot_low_variance_features(df, threshold=0.01, max_features=12):
+    """Detects and visualizes zero and near-zero variance features."""
+    
+    # Exclude ID columns from analysis
+    analysis_cols = [col for col in df.columns if col not in ID_COLUMNS]
+    
+    # Detect low variance features
+    low_var_features = []
+    for col in analysis_cols:
+        freq = df[col].value_counts(normalize=True, dropna=False)
+        if len(freq) == 1:
+            low_var_features.append({
+                'Feature': col, 
+                'Type': 'Zero Variance',
+                'Dominant Value': freq.index[0],
+                'Dominant %': 100.0
+            })
+        elif freq.iloc[0] > (1 - threshold):
+            low_var_features.append({
+                'Feature': col, 
+                'Type': 'Near-Zero Variance',
+                'Dominant Value': freq.index[0],
+                'Dominant %': freq.iloc[0] * 100
+            })
+    
+    low_var_df = pd.DataFrame(low_var_features)
+    
+    if len(low_var_df) == 0:
+        return None, None
+    
+    # Summary figure
+    summary_fig = px.bar(
+        low_var_df,
+        x='Feature',
+        y='Dominant %',
+        color='Type',
+        title=f'Low Variance Features (>{100*(1-threshold):.0f}% single value)',
+        hover_data=['Dominant Value'],
+        color_discrete_map={
+            'Zero Variance': '#e74c3c',
+            'Near-Zero Variance': '#f39c12'
+        }
+    )
+    summary_fig.update_layout(
+        xaxis_tickangle=-45,
+        height=400,
+        yaxis_title='Percentage of Most Common Value'
+    )
+    
+    # Distribution plots
+    features_to_plot = low_var_df['Feature'].head(max_features).tolist()
+    
+    # Create subplots
+    from plotly.subplots import make_subplots
+    n_features = len(features_to_plot)
+    n_cols = min(3, n_features)
+    n_rows = (n_features + n_cols - 1) // n_cols
+    
+    fig = make_subplots(
+        rows=n_rows, 
+        cols=n_cols,
+        subplot_titles=features_to_plot,
+        vertical_spacing=0.15,
+        horizontal_spacing=0.1
+    )
+    
+    for idx, feature in enumerate(features_to_plot):
+        row = idx // n_cols + 1
+        col = idx % n_cols + 1
+        
+        # Get value counts
+        value_counts = df[feature].value_counts().head(10)  # Limit to top 10 values
+        
+        # Create bar chart
+        fig.add_trace(
+            go.Bar(
+                x=value_counts.index.astype(str),
+                y=value_counts.values,
+                name=feature,
+                showlegend=False,
+                hovertemplate='%{x}: %{y}<extra></extra>',
+                marker_color='#3498db'
+            ),
+            row=row, col=col
+        )
+        
+        # Update axes
+        fig.update_xaxes(tickangle=-45, row=row, col=col)
+        fig.update_yaxes(title_text='Count', row=row, col=col)
+    
+    fig.update_layout(
+        title='Distribution of Low Variance Features',
+        height=300 * n_rows,
+        showlegend=False
+    )
+    
+    return low_var_df, summary_fig, fig
+
 # --- Top-level Metrics ---
 col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
@@ -552,14 +650,109 @@ with chart_col2:
     st.plotly_chart(fig_no_ids, use_container_width=True)
 
 # Show features with very low uniqueness
-low_uniqueness = distinct_counts[distinct_counts['Distinct Count'] <= 2]
+low_uniqueness = distinct_counts[distinct_counts['Distinct Count'] <= 1]
 if len(low_uniqueness) > 0:
-    st.warning(f"**{len(low_uniqueness)} features** with ≤2 unique values")
+    st.warning(f"**{len(low_uniqueness)} features** with ≤1 unique values")
     
-    # Create scrollable container showing all features
-    with st.container(height=120):
-        for feat in low_uniqueness['Feature']:
-            st.text(f"• {feat}")
+    # Check if examide and citoglipton are in the low uniqueness features
+    constant_drugs = ['examide', 'citoglipton']
+    found_constants = [feat for feat in constant_drugs if feat in low_uniqueness['Feature'].values]
+    other_constants = [feat for feat in low_uniqueness['Feature'] if feat not in constant_drugs]
+    
+    if found_constants:
+        # Create two columns for constant drug analysis
+        const_col1, const_col2 = st.columns([1, 2])
+        
+        with const_col1:
+            st.markdown("**Constant Drug Features:**")
+            # Create a styled container for the constant features
+            with st.container():
+                for feat in found_constants:
+                    unique_val = df[feat].dropna().unique()
+                    if len(unique_val) > 0:
+                        st.markdown(f"• **{feat}**: Always '{unique_val[0]}'")
+                    else:
+                        st.markdown(f"• **{feat}**: No non-null values")
+        
+        with const_col2:
+            with st.expander("🔧 Data Cleaning: Constant Drug Variables", expanded=False):
+                st.warning("""
+                ⚠️ **Important: Dropping the 'examide' and 'citoglipton' Columns**
+
+                The `examide` and `citoglipton` columns will be removed from the dataset due to the following reasons:
+
+                - **Zero variance**: These features have the same value for all records, providing no discriminatory power
+                - **No predictive value**: Constants cannot help distinguish between different outcomes or patient groups
+                - **Redundant information**: They add no information content to the model
+                - **Computational efficiency**: Removing them reduces dimensionality without information loss
+                - **Algorithm compatibility**: May cause issues with certain algorithms that require variance
+
+                **Decision**: Drop these columns before modeling as they do not explain any variance in the target variable and cannot improve model performance.
+                """)
+                df.drop(columns=found_constants, inplace=True)
+
+st.divider()
+st.header("🔍 Low Variance Feature Analysis")
+
+# Detect low variance features (fixed threshold)
+NZV_THRESHOLD = 0.01
+low_var_features = []
+
+# Exclude ID columns
+analysis_cols = [col for col in df.columns if col not in ID_COLUMNS]
+
+for col in analysis_cols:
+    freq = df[col].value_counts(normalize=True, dropna=False)
+    if len(freq) == 1:
+        low_var_features.append({
+            'Feature': col, 
+            'Type': 'Zero Variance',
+            'Dominant Value': str(freq.index[0]),
+            'Dominant %': 100.0,
+            'Unique Values': 1
+        })
+    elif freq.iloc[0] > 0.99:  # 99% threshold
+        low_var_features.append({
+            'Feature': col, 
+            'Type': 'Near-Zero Variance',
+            'Dominant Value': str(freq.index[0]),
+            'Dominant %': freq.iloc[0] * 100,
+            'Unique Values': len(freq)
+        })
+
+if low_var_features:
+    low_var_df = pd.DataFrame(low_var_features)
+    
+    # Simple summary
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Display table
+        st.dataframe(
+            low_var_df.style.format({'Dominant %': '{:.1f}%'}).background_gradient(
+                subset=['Dominant %'], 
+                cmap='Reds', 
+                vmin=99, 
+                vmax=100
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
+    
+    with col2:
+        with st.expander("🔧 Data Cleaning: Near-Zero Variance Medications", expanded=False):
+            st.warning("""
+            ⚠️ **Important: Dropping Near-Zero Variance Medication Columns**
+
+            Multiple medication columns show >99% of patients with "No" values:
+
+            - **Clinical interpretation**: These drugs were either not prescribed during the study period or are clinically irrelevant for the majority of diabetic cases
+            - **Statistical limitation**: With near-zero variance, these features cannot explain variance in the target variable
+            - **Predictive power**: Features dominated by a single value (>99%) cannot be meaningful predictors for readmission risk
+            - **Model efficiency**: Removing these features reduces dimensionality without losing predictive capability
+
+            **Decision**: Drop medication columns with >99% "No" values to improve model interpretability and computational efficiency.
+            """)
 
 # --- Data Preview Section ---
 st.markdown("---")
