@@ -120,14 +120,15 @@ def plot_interactive_matrix(df, sample_size=None, max_cols=50):
             line_width=0,
         )
     
-    # Update layout
+    # Update layout with title at top and x-axis labels at bottom
     fig.update_layout(
+        title=f'Missing Matrix (Sparse Visualization){sample_info}',
         xaxis=dict(
             tickmode='array',
             tickvals=list(range(len(missing_matrix.columns))),
             ticktext=[col for col in missing_matrix.columns],
             tickangle=-90,
-            side='top',
+            side='bottom',  # Changed from 'top' to 'bottom'
             showgrid=False,
             zeroline=False,
             range=[-1, len(missing_matrix.columns) + 7]
@@ -137,32 +138,22 @@ def plot_interactive_matrix(df, sample_size=None, max_cols=50):
             autorange='reversed',
             showgrid=False,
             zeroline=False,
-            range=[-2, len(missing_matrix)]
+            range=[0, len(missing_matrix)]  # Adjusted range
         ),
         height=600,
         width=1200,
         plot_bgcolor='white',
         showlegend=False,
-        margin=dict(l=50, r=100, t=120, b=80)
+        margin=dict(l=50, r=100, t=80, b=120)  # Increased bottom margin for x-axis labels
     )
     
-    # Add text annotations
+    # Add row count annotation
     fig.add_annotation(
         text=f"{len(missing_matrix)}",
         x=-1,
         y=len(missing_matrix)/2,
         showarrow=False,
         font=dict(size=12)
-    )
-    
-    # Title at bottom
-    fig.add_annotation(
-        text=f"Missing Matrix (Sparse Visualization){sample_info}",
-        x=len(missing_matrix.columns)/2,
-        y=len(missing_matrix) + 1,
-        showarrow=False,
-        font=dict(size=14, family="Arial"),
-        xanchor='center'
     )
     
     return fig
