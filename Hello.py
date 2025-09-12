@@ -43,4 +43,10 @@ def load_data():
         else:
             df = pd.concat([X, y], axis=1)
     
+    if hasattr(df, "to_pandas"):
+        df = df.to_pandas()
+    elif hasattr(df, "compute"):
+        df = df.compute()
+    else:  # fallback
+        df = pd.DataFrame(df)
     return df
