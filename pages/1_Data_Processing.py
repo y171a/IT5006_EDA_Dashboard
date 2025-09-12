@@ -94,7 +94,7 @@ with left_col:
             use_sampling = st.checkbox("Use sampling for performance", value=True)
         with col_b:
             if use_sampling:
-                sample_size = st.slider("Sample size", 100, 1000, 500, 100)
+                sample_size = st.slider("Sample size", 100, 500, 500, 100)
             else:
                 sample_size = None
         
