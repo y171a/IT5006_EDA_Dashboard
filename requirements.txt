@@ -8,3 +8,4 @@ scikit-learn==1.6.1
 scipy==1.13.1
 seaborn==0.13.2
 ucimlrepo==0.0.7
+statsmodels==0.14.5
