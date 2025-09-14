@@ -687,7 +687,8 @@ with st.expander("📊 Dataset Summary Statistics", expanded=False):
         st.markdown("**Readmission Statistics:**")
         readmit_stats = df_repeated['readmitted'].value_counts(normalize=True) * 100
         for status, pct in readmit_stats.items():
-            st.write(f"- {status}: {pct:.1f}%")
+            status_display = status.replace(">", "\\>") if status.startswith(">") else status
+            st.write(f"- {status_display}: {pct:.1f}%")
 
 # Note about additional features
 st.info("💡 **Note**: This dashboard focuses on repeated patients (those with multiple encounters). Additional analyses and features can be added to explore single-encounter patients, temporal patterns, and predictive insights.")
